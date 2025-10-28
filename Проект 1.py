@@ -1,0 +1,331 @@
+import sys
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                             QHBoxLayout, QTabWidget, QPushButton, QListWidget,
+                             QListWidgetItem, QDialog, QLabel, QLineEdit,
+                             QTextEdit, QDateEdit, QDialogButtonBox, QMessageBox
+                             )
+from PyQt6.QtCore import QDate, Qt
+from PyQt6.QtGui import QFont
+
+
+class TaskDialog(QDialog):
+    def __init__(self, parent=None, task_data=None):
+        super().__init__(parent)
+        self.task_data = task_data
+        self.is_edit_mode = task_data is not None
+
+        title = "Редактировать задачу" if self.is_edit_mode else "Новая задача"
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.resize(400, 300)
+
+        self.initUI()
+
+        if self.is_edit_mode:
+            self.new_data()
+
+    def initUI(self):
+        layout = QVBoxLayout()
+
+        title_layout = QHBoxLayout()
+        title_label = QLabel("Название задачи:")
+        self.title_input = QLineEdit()
+        self.title_input.setPlaceholderText("Введите название задачи")
+        title_layout.addWidget(title_label)
+        title_layout.addWidget(self.title_input)
+
+        desc_layout = QVBoxLayout()
+        desc_label = QLabel("Описание задачи:")
+        self.desc_input = QTextEdit()
+        self.desc_input.setPlaceholderText("Введите описание задачи")
+        self.desc_input.setMaximumHeight(100)
+        desc_layout.addWidget(desc_label)
+        desc_layout.addWidget(self.desc_input)
+
+        deadline_layout = QHBoxLayout()
+        deadline_label = QLabel("Дедлайн:")
+        self.deadline_input = QDateEdit()
+        self.deadline_input.setDate(QDate.currentDate())
+        self.deadline_input.setCalendarPopup(True)
+        self.deadline_input.setMinimumDate(QDate.currentDate())
+        deadline_layout.addWidget(deadline_label)
+        deadline_layout.addWidget(self.deadline_input)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
+                                      QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(self.accepting)
+        button_box.rejected.connect(self.reject)
+
+        layout.addLayout(title_layout)
+        layout.addLayout(desc_layout)
+        layout.addLayout(deadline_layout)
+        layout.addWidget(button_box)
+
+        self.setLayout(layout)
+
+    def new_data(self):
+        self.title_input.setText(self.task_data['title'])
+        self.desc_input.setPlainText(self.task_data['description'])
+
+        date_str = self.task_data['deadline']
+        date = QDate.fromString(date_str, "dd.MM.yyyy")
+        if date.isValid():
+            self.deadline_input.setDate(date)
+
+    def accepting(self):
+        if not self.title_input.text().strip():
+            QMessageBox.warning(self, "Ошибка", "Введите название задачи!")
+            return
+
+        self.accept()
+
+    def get_data(self):
+        return {
+            'title': self.title_input.text().strip(),
+            'description': self.desc_input.toPlainText().strip(),
+            'deadline': self.deadline_input.date().toString("dd.MM.yyyy")
+        }
+
+
+class TaskItemWidget(QWidget):
+    def __init__(self, task_data, parent=None):
+        super().__init__(parent)
+        self.task_data = task_data
+        self.initUI()
+
+    def initUI(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 5, 10, 5)
+
+        top_layout = QHBoxLayout()
+
+        title_label = QLabel(self.task_data['title'])
+        title_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+
+        deadline_label = QLabel(f"До: {self.task_data['deadline']}")
+        deadline_label.setStyleSheet("color: #666; font-size: 9px;")
+
+        top_layout.addWidget(title_label, 1)
+        top_layout.addWidget(deadline_label)
+
+        if self.task_data['description']:
+            desc_label = QLabel(self.task_data['description'])
+            desc_label.setStyleSheet("color: #555; font-size: 9px; margin-top: 2px;")
+            desc_label.setWordWrap(True)
+            desc_label.setMaximumHeight(40)
+            layout.addLayout(top_layout)
+            layout.addWidget(desc_label)
+        else:
+            layout.addLayout(top_layout)
+
+        self.setLayout(layout)
+        self.setStyleSheet("""
+            TaskItemWidget {
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                background-color: #f9f9f9;
+                margin: 2px;
+            }
+            TaskItemWidget:hover {
+                background-color: #e9e9e9;
+                border-color: #999;
+            }
+        """)
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("To-Do приложение")
+        self.resize(700, 500)
+
+        self.tasks = []
+
+        self.initUI()
+
+    def initUI(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        main_layout = QVBoxLayout()
+        central_widget.setLayout(main_layout)
+
+        self.tab_widget = QTabWidget()
+
+        self.tasks_tab = QWidget()
+        self.setup_tasks_tab()
+
+        self.about_tab = QWidget()
+        self.set_about_tab()
+
+        self.tab_widget.addTab(self.tasks_tab, "Список задач")
+        self.tab_widget.addTab(self.about_tab, "О программе")
+
+        main_layout.addWidget(self.tab_widget)
+
+    def setup_tasks_tab(self):
+        layout = QVBoxLayout()
+
+        buttons_layout = QHBoxLayout()
+
+        self.create_task_btn = QPushButton("Создать задачу")
+        self.create_task_btn.clicked.connect(self.create_task)
+        self.create_task_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                font-size: 14px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+
+        self.edit_task_btn = QPushButton("Редактировать задачу")
+        self.edit_task_btn.clicked.connect(self.edit_task)
+        self.edit_task_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                font-size: 14px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #0b7dda;
+            }
+        """)
+
+        self.delete_task_btn = QPushButton("Удалить задачу")
+        self.delete_task_btn.clicked.connect(self.delete_task)
+        self.delete_task_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                font-size: 14px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+        """)
+
+        buttons_layout.addWidget(self.create_task_btn)
+        buttons_layout.addWidget(self.edit_task_btn)
+        buttons_layout.addWidget(self.delete_task_btn)
+        buttons_layout.addStretch()
+
+        self.tasks_list = QListWidget()
+        self.tasks_list.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                background-color: white;
+            }
+            QListWidget::item:selected {
+                background-color: #e3f2fd;
+                border: 1px solid #2196F3;
+            }
+        """)
+        self.tasks_list.itemDoubleClicked.connect(self.edit_task)
+
+        layout.addLayout(buttons_layout)
+        layout.addWidget(self.tasks_list)
+
+        self.tasks_tab.setLayout(layout)
+
+    def set_about_tab(self):
+        layout = QVBoxLayout()
+
+        about_text = QLabel(
+            "<p>Скоро здесь что-нибудь будет</p>"
+            "<p>Осталось добавить:</p>"
+            "<p>вкладку с архивом выполненных задач</p>"
+            "<p>сохранение задач в sql-базу</p>"
+
+        )
+        about_text.setAlignment(Qt.AlignmentFlag.AlignTop)
+        about_text.setWordWrap(True)
+
+        layout.addWidget(about_text)
+        self.about_tab.setLayout(layout)
+
+    def create_task(self):
+        dialog = TaskDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            task_data = dialog.get_data()
+            self.add_task_to_list(task_data)
+
+    def edit_task(self):
+        current_row = self.tasks_list.currentRow()
+        if current_row == -1:
+            QMessageBox.warning(self, "Ошибка", "Выберите задачу для редактирования!")
+            return
+
+        task_data = self.tasks[current_row]
+
+        dialog = TaskDialog(self, task_data)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            updated_task_data = dialog.get_data()
+            self.tasks[current_row] = updated_task_data
+
+            self.refresh_tasks_list()
+
+    def delete_task(self):
+        current_row = self.tasks_list.currentRow()
+        if current_row == -1:
+            QMessageBox.warning(self, "Ошибка", "Выберите задачу для удаления")
+            return
+
+        del self.tasks[current_row]
+        self.refresh_tasks_list()
+
+    def add_task_to_list(self, task_data):
+        self.tasks.append(task_data)
+        self.refresh_tasks_list()
+
+    def refresh_tasks_list(self):
+        self.tasks_list.clear()
+
+        for task_data in self.tasks:
+            task_widget = TaskItemWidget(task_data)
+
+            list_item = QListWidgetItem(self.tasks_list)
+            list_item.setSizeHint(task_widget.sizeHint())
+
+            self.tasks_list.addItem(list_item)
+            self.tasks_list.setItemWidget(list_item, task_widget)
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+
+    app.setStyleSheet("""
+        QMainWindow {
+            background-color: #f0f0f0;
+        }
+        QTabWidget::pane {
+            border: 1px solid #C2C7CB;
+            background-color: white;
+        }
+        QTabBar::tab {
+            background-color: #E1E1E1;
+            border: 1px solid #C4C4C3;
+            padding: 8px 20px;
+        }
+        QTabBar::tab:selected {
+            background-color: white;
+            border-bottom-color: white;
+        }
+    """)
+
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
+
